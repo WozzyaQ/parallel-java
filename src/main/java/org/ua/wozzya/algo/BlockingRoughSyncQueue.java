@@ -6,6 +6,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * Implements rough-locking. Only one thread in a single moment
+ * of time putting or polling value to/from the queue
+ */
 public class BlockingRoughSyncQueue<T> implements PutPollQueue<T> {
 
     private final AtomicReference<VolatileNode<T>> head;
