@@ -9,10 +9,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Implements find-grained add/remove methods.
+ * Fine-grained locking means we locking only those nodes
+ * locking which will guarantee list invariant stable (elem < elem + 1)
+ *
+ * In the case of list, we need to lock the current node and previous one.
+ */
 public class FineGrainedList<T extends Comparable<T>> {
     private AtomicReference<VolatileLockableNode<T>> head;
 
     public FineGrainedList() {
+        // insert in head pivotal null-node
         head = new AtomicReference<>(new VolatileLockableNode<>());
     }
 
@@ -22,6 +30,7 @@ public class FineGrainedList<T extends Comparable<T>> {
         VolatileLockableNode<T> node = new VolatileLockableNode<>(val);
 
         prev.lock();
+        // if list is empty
         if (prev.getNext() == null) {
             prev.setNext(node);
             prev.unlock();
@@ -29,11 +38,15 @@ public class FineGrainedList<T extends Comparable<T>> {
         } else {
             VolatileLockableNode<T> cur = (VolatileLockableNode<T>) prev.getNext();
             cur.lock();
+            // scroll to desired node
             while (cur.getKey().compareTo(val) < 0) {
                 prev.unlock();
                 prev = cur;
 
                 cur = (VolatileLockableNode<T>) cur.getNext();
+
+                // if we lucky to find end of list
+                // just add new node and return
                 if (cur == null) {
                     prev.setNext(node);
                     prev.unlock();
@@ -42,6 +55,8 @@ public class FineGrainedList<T extends Comparable<T>> {
                     cur.lock();
                 }
             }
+            // if the value not in the list
+            // link nodes and return
             try {
                 if (cur.getKey() == val) {
                     return false;
@@ -60,13 +75,18 @@ public class FineGrainedList<T extends Comparable<T>> {
 
     public boolean remove(T val) {
         VolatileLockableNode<T> prev = head.get();
+
+        // case if list is empty
         prev.lock();
         if (prev.getNext() == null) {
+            prev.unlock();
             return false;
         }
         VolatileLockableNode<T> cur = (VolatileLockableNode<T>) prev.getNext();
         cur.lock();
 
+        // scroll until we find desired node and unlink it
+        // or find end of list
         while (cur != null) {
             T curVal = cur.getKey();
             if (curVal.compareTo(val) == 0) {
@@ -84,6 +104,7 @@ public class FineGrainedList<T extends Comparable<T>> {
                 cur.lock();
             }
         }
+
         prev.unlock();
         return false;
     }
@@ -100,11 +121,11 @@ public class FineGrainedList<T extends Comparable<T>> {
                     lst.add(val);
                     try {
                         System.out.println(Thread.currentThread().getName() + " add [" + val + "]");
-                        Thread.sleep(new Random().nextInt(1000));
+                        Thread.sleep(new Random().nextInt(10));
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    System.out.println(Thread.currentThread().getName() + " remove  [" + val + "] = " + lst.remove(val));
+                    System.out.println(Thread.currentThread().getName() + " remove  [" + (val + 1 )+ "] = " + lst.remove(val +1));
                 }
             });
         }
