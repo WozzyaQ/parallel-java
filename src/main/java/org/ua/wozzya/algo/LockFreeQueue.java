@@ -3,8 +3,6 @@ package org.ua.wozzya.algo;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -13,8 +11,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * and {@link LockFreeQueue#poll}
  */
 public class LockFreeQueue<T> implements PutPollQueue<T> {
-    private final AtomicReference<AtomicNode<T>> head;
-    private final AtomicReference<AtomicNode<T>> tail;
+    private final AtomicReference<VolatileNode<T>> head;
+    private final AtomicReference<VolatileNode<T>> tail;
     private final AtomicInteger queueSize;
 
 
@@ -25,66 +23,27 @@ public class LockFreeQueue<T> implements PutPollQueue<T> {
     }
 
 
-    public static class AtomicNode<T> {
-        // volatile for granting visibility to all threads
-        // when changing next/prev references
-        private volatile T key;
-        private volatile AtomicNode<T> next;
-        private volatile AtomicNode<T> prev;
-
-        public AtomicNode(T key) {
-            this.key = key;
-            next = null;
-            prev = null;
-        }
-
-        public AtomicNode<T> getPrev() {
-            return prev;
-        }
-
-        public void setPrev(AtomicNode<T> prev) {
-            this.prev = prev;
-        }
-
-        public AtomicNode<T> getNext() {
-            return next;
-        }
-
-        public void setNext(AtomicNode<T> next) {
-            this.next = next;
-        }
-
-        public T getKey() {
-            return key;
-        }
-
-        public void setKey(T key) {
-            this.key = key;
-        }
-    }
-
     @Override
     public void put(T val) {
         Objects.requireNonNull(val, "cannot store nulls");
 
-        AtomicNode<T> newNode = new AtomicNode<>(val);
-
-        // for first set of head
-        head.compareAndSet(null, newNode);
+        VolatileNode<T> newNode = new VolatileNode<>(val);
 
         // when putting try setting the newNode as queue tail
         // if other thread sets node faster - retry
-        AtomicNode<T> tailRef;
+        VolatileNode<T> tailRef;
         do {
             tailRef = tail.get();
             newNode.setPrev(tailRef);
         } while (!tail.compareAndSet(tailRef, newNode));
 
         // for backlink
-        if (newNode.prev != null) {
-            newNode.prev.next = newNode;
+        if (newNode.getPrev() != null) {
+            newNode.getPrev().setNext(newNode);
         }
 
+        // for first set of head
+        head.compareAndSet(null, newNode);
         queueSize.incrementAndGet();
     }
 
@@ -94,8 +53,8 @@ public class LockFreeQueue<T> implements PutPollQueue<T> {
             return Optional.empty();
         }
 
-        AtomicNode<T> curHeadRef;
-        AtomicNode<T> nextToHeadRef;
+        VolatileNode<T> curHeadRef;
+        VolatileNode<T> nextToHeadRef;
         // try moving head one node further from current head
         do {
             curHeadRef = head.get();
@@ -107,37 +66,7 @@ public class LockFreeQueue<T> implements PutPollQueue<T> {
     }
 
     public static void main(String[] args) {
-        ExecutorService ex = Executors.newFixedThreadPool(3);
-        LockFreeQueue<Integer> queue = new LockFreeQueue<>();
-
-        Runnable queuePut = () -> {
-            while (true) {
-                int val = new Random().nextInt(10);
-                System.out.println("I am putting " + val + " to the queue");
-                queue.put(val);
-                try {
-                    Thread.sleep(900);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        };
-
-        Runnable queuePoll = () -> {
-            while (true) {
-                queue.poll().ifPresent(System.out::println);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        };
-
-        ex.execute(queuePut);
-        ex.execute(queuePut);
-        ex.execute(queuePoll);
-
-        ex.shutdown();
+        QueueRunUtils.<Integer>putPollRunInfinite(new LockFreeQueue<>(),
+                () -> new Random().nextInt(10),2,500,2000,2);
     }
 }
