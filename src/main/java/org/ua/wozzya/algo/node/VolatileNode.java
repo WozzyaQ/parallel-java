@@ -1,4 +1,4 @@
-package org.ua.wozzya.algo;
+package org.ua.wozzya.algo.node;
 
 public class VolatileNode<T> {
     // volatile for granting visibility to all threads

@@ -1,5 +1,7 @@
 package org.ua.wozzya.algo;
 
+import org.ua.wozzya.algo.node.VolatileNode;
+
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;

@@ -1,9 +1,11 @@
-package org.ua.wozzya.algo;
+package org.ua.wozzya.algo.node;
+
+import org.ua.wozzya.algo.node.VolatileNode;
 
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class VolatileLockableNode<T> extends VolatileNode<T>{
+public class VolatileLockableNode<T> extends VolatileNode<T> {
 
     private Lock lock;
 

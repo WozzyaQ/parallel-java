@@ -1,5 +1,7 @@
 package org.ua.wozzya.algo;
 
+import org.ua.wozzya.algo.node.VolatileLockableNode;
+
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
