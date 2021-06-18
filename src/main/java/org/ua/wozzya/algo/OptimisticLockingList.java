@@ -4,7 +4,6 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiPredicate;
 
 public class OptimisticLockingList <T extends Comparable<T>>{
     private AtomicReference<VolatileLockableNode<T>> head;
@@ -39,7 +38,7 @@ public class OptimisticLockingList <T extends Comparable<T>>{
                 // if we have found end of list
                 if (cur == null) {
                     prev.lock();
-                    if(validate(prev,null)) {
+                    if(ensureConsistency(prev,null)) {
                         prev.setNext(node);
                         prev.unlock();
                         return true;
@@ -54,7 +53,7 @@ public class OptimisticLockingList <T extends Comparable<T>>{
             prev.lock();
             cur.lock();
             try {
-                if(!validate(prev, cur)) continue onFail;
+                if(!ensureConsistency(prev, cur)) continue onFail;
                 if(cur.getKey().compareTo(val) == 0) {
                     return false;
                 } else {
@@ -70,10 +69,39 @@ public class OptimisticLockingList <T extends Comparable<T>>{
     }
 
     public boolean remove(T val) {
-        return false;
+        onFail: while (true) {
+            VolatileLockableNode<T> prev = head.get();
+            VolatileLockableNode<T> cur = (VolatileLockableNode<T>) prev.getNext();
+
+            while (cur != null && cur.getKey().compareTo(val) < 0) {
+                prev = cur;
+                cur = (VolatileLockableNode<T>) cur.getNext();
+            }
+            // if we got end of list
+            if(cur == null) {
+                // not found
+                return false;
+            } else {
+                prev.lock();
+                cur.lock();
+                try{
+                    if(!ensureConsistency(prev, cur)) continue onFail;
+                    if(cur.getKey() == val) {
+                        prev.setNext(cur.getNext());
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } finally {
+                    cur.unlock();
+                    prev.unlock();
+                }
+            }
+        }
     }
 
-    private boolean validate(VolatileLockableNode<T> prev, VolatileLockableNode<T> cur) {
+    // TODO more refactoring?
+    private boolean ensureConsistency(VolatileLockableNode<T> prev, VolatileLockableNode<T> cur) {
         VolatileLockableNode<T> node = head.get();
 
         while (node != null) {
@@ -96,14 +124,41 @@ public class OptimisticLockingList <T extends Comparable<T>>{
 
     public static void main(String[] args) throws InterruptedException {
         OptimisticLockingList<Integer> lst = new OptimisticLockingList<>();
-        int[] ints = new Random().ints(15,-100,100).toArray();
 
-        ExecutorService ex = Executors.newFixedThreadPool(4);
-        for(int i = 0; i < ints.length; ++i) {
-            int index = i;
-            ex.execute(() -> lst.add(ints[index]));
+        int numOfThreads = 4;
+        ExecutorService ex = Executors.newFixedThreadPool(numOfThreads);
+        for(int i = 0; i < numOfThreads; ++i) {
+            ex.execute(() -> {
+                while (true) {
+                    int num = new Random().nextInt(10);
+                    System.out.println("try add " + num);
+                    boolean res = lst.add(num);
+                    System.out.println("add " + num + " = " + res);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+            ex.execute(()-> {
+                while (true) {
+                    int num = new Random().nextInt(10);
+                    System.out.println("try remove " + num);
+                    boolean res = lst.remove(num);
+                    System.out.println("remove " + num + " = " + res);
+
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
         }
 
-        Thread.sleep(3000);
+
     }
+
 }
