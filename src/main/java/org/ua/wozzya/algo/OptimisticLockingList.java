@@ -7,6 +7,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Implements optimistic-locking add/remove methods.
+ *
+ * Now we scrolling through list without locking till we find
+ * insertion place or element to be removed. Than we use lock
+ * elements and ensuring they are still present in the list and
+ * the order between successor and predecessor remains the same
+ */
 public class OptimisticLockingList <T extends Comparable<T>>{
     private AtomicReference<VolatileLockableNode<T>> head;
 
